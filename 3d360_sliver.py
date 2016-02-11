@@ -1,13 +1,12 @@
 import os
 from sys import argv
 from PIL import Image
+import tifffile
 import rawpy
 import imageio
 from shutil import copyfile
 
-def sliver(pixCount, raw, destPath):
-	rawpyPars = rawpy.Params(output_bps=16)
-	rgb = raw.postprocess(params=rawpyPars)
+def sliver(pixCount, rgb, destPath):
 	w = rgb.shape[1]
 	rgbSliver = rgb[:,w / 2 - pixCount / 2:w / 2 + pixCount / 2,:]
 	imageio.imsave(destPath, rgbSliver)
@@ -24,55 +23,52 @@ def main(pixCount, srcDir, destDir):
 		if os.path.isfile(destPath):
 			#print(countLog, destName, 'already processed')
 			continue
-		try:
-			# srcExt = srcName.split('.')[-1]
-			# print('ext', ']'+srcExt+'[', srcExt in ['png', 'jpg', 'tif'])
-			# if srcExt in ['png', 'jpg', 'tif']:
-			# 	print('x', srcPath)
-			# 	try:
-			# 		img = Image.open(srcPath)
-			# 	except:
-			# 		raw = None
-			# 	print('y')
-			# 	return #<<
-			# elif srcExt in ['nef', 'cr2', 'dng']:
-			# 	try:
-			# 		raw = rawpy.imread(srcPath)
-			# 	except:
-			# 		raw = None
-			# else:
-			# 	print(countLog, srcName, 'file format not supported')
-			# 	continue
-			# return #<<
-			raw = rawpy.imread(srcPath)
-		except:
-			raw = None
-		if raw:
-			print(countLog, srcName)
-			sliver(pixCount, raw, destPath)
-		else:
-			corruptDir = os.path.join(srcDir, '../corrupt')
-			if not os.path.isdir(corruptDir):
-				os.makedirs(corruptDir)
-			corruptPath = os.path.join(corruptDir, srcName)
-			if not os.path.exists(corruptPath):
-				copyfile(srcPath, corruptPath)
-				print(countLog, srcName, 'rawpy import faild, copied to "corrupt" dir')
-			else:
-				convertedName = srcName.split('.')[0] + '.dng'
-				convertedPath = os.path.join(corruptDir, convertedName)
-				if not os.path.exists(convertedPath):
-					print(countLog, srcName, 'is corrupt, convert to .dng, leave in "corrupt" dir')
+		srcExt = srcName.split('.')[-1]
+		
+		if srcExt in ['png', 'jpg']:
+			img = Image.open(srcPath)
+			rgb = numpy.asarray(img)
+			sliver(pixCount, rgb, destPath)
+			print(countLog, srcName, 'slivered')
+
+		elif srcExt in ['tif', 'tiff']:
+			rgb = tifffile.imread(srcPath)
+			sliver(pixCount, rgb, destPath)
+			print(countLog, srcName, 'slivered')
+
+		elif srcExt in ['nef', 'cr2', 'dng']:
+			try:
+				raw = rawpy.imread(srcPath)
+			except:
+				raw = None
+			if raw:
+				rawpyPars = rawpy.Params(output_bps=16)
+				rgb = raw.postprocess(params=rawpyPars)
+				sliver(pixCount, rgb, destPath)
+				print(countLog, srcName, 'slivered')
+			else:	
+				corruptDir = os.path.join(srcDir, '../corrupt')
+				if not os.path.isdir(corruptDir):
+					os.makedirs(corruptDir)
+				corruptPath = os.path.join(corruptDir, srcName)
+				if not os.path.exists(corruptPath):
+					copyfile(srcPath, corruptPath)
+					print(countLog, srcName, 'rawpy import faild, copied to "corrupt" dir')
 				else:
-					try:
-						raw = rawpy.imread(convertedPath)
-					except:
-						raw = None
-					if raw:
-						print(countLog, convertedName)
-						sliver(pixCount, rawConverted, destPath)
+					convertedName = srcName.split('.')[0] + '.dng'
+					convertedPath = os.path.join(corruptDir, convertedName)
+					if not os.path.exists(convertedPath):
+						print(countLog, srcName, 'is corrupt, convert to .dng, leave in "corrupt" dir')
 					else:
-						print(countLog, convertedName, 'found converted .dng, rawpy import faild, you`re screwed')
+						try:
+							raw = rawpy.imread(convertedPath)
+						except:
+							raw = None
+						if raw:
+							print(countLog, convertedName)
+							sliver(pixCount, rawConverted, destPath)
+						else:
+							print(countLog, convertedName, 'found converted .dng, rawpy import faild, you`re screwed')
 	print('finished!')
 
 if __name__ == "__main__":
